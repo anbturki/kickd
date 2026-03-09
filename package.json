@@ -1,0 +1,70 @@
+{
+  "name": "kickd",
+  "version": "0.1.0",
+  "description": "Background automation daemon with MCP server, skill engine, task scheduler, and Claude Code bridge. Run tasks on schedule, chain composable skills, and integrate with Claude Code bidirectionally.",
+  "module": "index.ts",
+  "type": "module",
+  "license": "MIT",
+  "author": "Ali Turki",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anbturki/kickd.git"
+  },
+  "homepage": "https://github.com/anbturki/kickd",
+  "bugs": {
+    "url": "https://github.com/anbturki/kickd/issues"
+  },
+  "keywords": [
+    "automation",
+    "daemon",
+    "mcp",
+    "mcp-server",
+    "model-context-protocol",
+    "claude",
+    "claude-code",
+    "task-scheduler",
+    "skills",
+    "background-tasks",
+    "bun",
+    "hono",
+    "cli"
+  ],
+  "scripts": {
+    "start": "bun run src/daemon.ts",
+    "mcp": "bun run src/mcp-entry.ts",
+    "cli": "bun run src/cli/index.ts"
+  },
+  "bin": {
+    "kickd": "src/cli/index.ts"
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./skills": "./src/skills/engine.ts",
+    "./tasks": "./src/tasks/registry.ts",
+    "./bridge": "./src/bridge/claude.ts",
+    "./types": "./src/types.ts"
+  },
+  "files": [
+    "src",
+    "tasks",
+    "skills",
+    "index.ts",
+    "CLAUDE.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "hono": "^4.12.5",
+    "zod": "^4.3.6"
+  },
+  "engines": {
+    "bun": ">=1.0.0"
+  }
+}

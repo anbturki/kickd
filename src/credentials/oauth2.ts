@@ -56,7 +56,7 @@ export async function exchangeCode(params: {
     throw new Error(`Token exchange failed (${response.status}): ${error}`);
   }
 
-  return response.json();
+  return (await response.json()) as OAuth2TokenResponse;
 }
 
 // Refresh an access token using a refresh token
@@ -84,7 +84,7 @@ export async function refreshAccessToken(params: {
     throw new Error(`Token refresh failed (${response.status}): ${error}`);
   }
 
-  return response.json();
+  return (await response.json()) as OAuth2TokenResponse;
 }
 
 // Refresh a stored credential's access token

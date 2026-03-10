@@ -75,7 +75,7 @@ function getClientKey(c: Context): string {
   // Use X-Forwarded-For if behind a proxy, otherwise use the connection info
   const forwarded = c.req.header("X-Forwarded-For");
   if (forwarded) {
-    return forwarded.split(",")[0].trim();
+    return forwarded.split(",")[0]!.trim();
   }
 
   // Fallback to a generic key for localhost

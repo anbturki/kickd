@@ -18,12 +18,16 @@ function headers(): Record<string, string> {
   return h;
 }
 
-async function request(path: string, options?: RequestInit) {
+// CLI response record — values are primitives for display
+type Val = string | number | boolean | null | undefined;
+type Rec = Record<string, Val | Record<string, Val> | Val[]>;
+
+async function request<T = Rec>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${baseUrl}${path}`, {
     ...options,
     headers: { ...headers(), ...options?.headers },
   });
-  return res.json();
+  return (await res.json()) as T;
 }
 
 async function main() {
@@ -32,7 +36,7 @@ async function main() {
 
     case "tasks":
     case "list": {
-      const tasks = await request("/tasks");
+      const tasks = await request<Rec[]>("/tasks");
       if (tasks.length === 0) {
         console.log("No tasks registered.");
       } else {
@@ -40,7 +44,7 @@ async function main() {
         for (const t of tasks) {
           const status = t.status === "running" ? " [running]" : "";
           const schedule = t.schedule ? ` (${t.schedule})` : "";
-          const retry = t.retry ? ` [retry: ${t.retry.maxAttempts}x]` : "";
+          const retry = t.retry ? ` [retry: ${(t.retry as Record<string, Val>).maxAttempts}x]` : "";
           console.log(`  ${t.id} - ${t.name}${schedule}${retry}${status}`);
           if (t.nextRun) console.log(`    Next run: ${t.nextRun}`);
         }
@@ -61,7 +65,7 @@ async function main() {
         body: JSON.stringify(params),
       });
       console.log(result.success ? "Success:" : "Failed:", result.output);
-      console.log(`Duration: ${Math.round(result.duration)}ms`);
+      console.log(`Duration: ${Math.round(result.duration as number)}ms`);
       break;
     }
 
@@ -72,14 +76,14 @@ async function main() {
         process.exit(1);
       }
       const type = rest.includes("--skill") ? "skills" : "tasks";
-      const history = await request(`/${type}/${id}/history?limit=10`);
+      const history = await request<Rec[]>(`/${type}/${id}/history?limit=10`);
       if (history.length === 0) {
         console.log("No history found.");
       } else {
         console.log(`\nLast ${history.length} runs for ${id}:`);
         for (const h of history) {
           const status = h.status === "completed" ? "OK" : "FAIL";
-          const duration = h.duration_ms ? `${Math.round(h.duration_ms)}ms` : "-";
+          const duration = h.duration_ms ? `${Math.round(h.duration_ms as number)}ms` : "-";
           console.log(`  [${status}] ${h.started_at} (${duration})`);
           if (h.output) console.log(`    ${String(h.output).slice(0, 100)}`);
           if (h.error) console.log(`    Error: ${h.error}`);
@@ -91,7 +95,7 @@ async function main() {
     // ── Skills ──
 
     case "skills": {
-      const list = await request("/skills");
+      const list = await request<Rec[]>("/skills");
       if (list.length === 0) {
         console.log("No skills registered.");
       } else {
@@ -130,7 +134,7 @@ async function main() {
     case "webhook": {
       const sub = rest[0];
       if (!sub || sub === "list") {
-        const hooks = await request("/hooks");
+        const hooks = await request<Rec[]>("/hooks");
         if (hooks.length === 0) {
           console.log("No webhooks registered.");
         } else {
@@ -172,7 +176,7 @@ async function main() {
     case "events": {
       const sub = rest[0];
       if (sub === "rules") {
-        const rules = await request("/events/rules");
+        const rules = await request<Rec[]>("/events/rules");
         if (rules.length === 0) {
           console.log("No event rules.");
         } else {
@@ -208,7 +212,7 @@ async function main() {
         console.log(`Deleted rule: ${id}`);
       } else {
         // Default: show recent events
-        const events = await request("/events?limit=20");
+        const events = await request<Rec[]>("/events?limit=20");
         if (events.length === 0) {
           console.log("No events logged.");
         } else {
@@ -226,13 +230,13 @@ async function main() {
     case "notify": {
       const sub = rest[0];
       if (!sub || sub === "list") {
-        const channels = await request("/notifications/channels");
+        const channels = await request<Rec[]>("/notifications/channels");
         if (channels.length === 0) {
           console.log("No notification channels configured.");
         } else {
           console.log("\nNotification channels:");
           for (const ch of channels) {
-            const events = JSON.parse(ch.events).join(", ");
+            const events = JSON.parse(ch.events as string).join(", ");
             console.log(`  ${ch.id} [${ch.type}] -> ${events}`);
           }
         }
@@ -267,14 +271,15 @@ async function main() {
     case "credentials": {
       const sub = rest[0];
       if (!sub || sub === "list") {
-        const creds = await request("/credentials");
+        const creds = await request<Rec[]>("/credentials");
         if (creds.length === 0) {
           console.log("No credentials stored.");
         } else {
           console.log("\nStored credentials:");
           for (const c of creds) {
-            const tags = c.tags.length > 0 ? ` [${c.tags.join(", ")}]` : "";
-            console.log(`  ${c.name} (${c.typeId})${tags}`);
+            const tags = c.tags as Val[] | undefined;
+            const tagStr = tags && tags.length > 0 ? ` [${tags.join(", ")}]` : "";
+            console.log(`  ${c.name} (${c.typeId})${tagStr}`);
             console.log(`    id: ${c.id} | created: ${c.createdAt}`);
           }
         }
@@ -309,7 +314,7 @@ async function main() {
         } else {
           console.log(`\n${cred.name} (${cred.typeId})`);
           console.log("Data (sensitive values redacted):");
-          for (const [key, value] of Object.entries(cred.data)) {
+          for (const [key, value] of Object.entries(cred.data as Record<string, Val>)) {
             console.log(`  ${key}: ${value}`);
           }
         }
@@ -331,20 +336,20 @@ async function main() {
         await request(`/credentials/${nameOrId}`, { method: "DELETE" });
         console.log("Deleted.");
       } else if (sub === "types") {
-        const types = await request("/credentials/types");
+        const types = await request<Rec[]>("/credentials/types");
         console.log("\nAvailable credential types:");
-        const byCategory = new Map<string, typeof types>();
+        const byCategory = new Map<string, Rec[]>();
         for (const t of types) {
-          const cat = t.category ?? "other";
+          const cat = (t.category ?? "other") as string;
           if (!byCategory.has(cat)) byCategory.set(cat, []);
           byCategory.get(cat)!.push(t);
         }
         for (const [cat, catTypes] of byCategory) {
           console.log(`\n  ${cat}:`);
           for (const t of catTypes) {
-            const fields = t.fields.map((f: { name: string; required: boolean }) =>
-              f.required ? f.name : `${f.name}?`
-            ).join(", ");
+            const fields = (t.fields as unknown as Array<{ name: string; required: boolean }>)
+              .map((f) => (f.required ? f.name : `${f.name}?`))
+              .join(", ");
             console.log(`    ${t.id} - ${t.name} (${fields})`);
           }
         }
@@ -358,13 +363,15 @@ async function main() {
     case "workflow": {
       const sub = rest[0];
       if (!sub || sub === "list") {
-        const list = await request("/workflows");
+        const list = await request<Rec[]>("/workflows");
         if (list.length === 0) {
           console.log("No workflows registered.");
         } else {
           console.log("\nWorkflows:");
           for (const w of list) {
-            const trigger = w.trigger ? ` [${w.trigger.type}]` : " [manual]";
+            const trigger = w.trigger
+              ? ` [${(w.trigger as Record<string, Val>).type}]`
+              : " [manual]";
             console.log(`  ${w.id} - ${w.name}${trigger} (${w.stepCount} steps)`);
           }
         }
@@ -381,11 +388,12 @@ async function main() {
           body: JSON.stringify(input),
         });
         console.log(result.success ? "Completed successfully" : "Failed");
-        console.log(`Duration: ${Math.round(result.totalDuration)}ms`);
-        console.log(`Steps: ${result.steps.length}`);
-        for (const step of result.steps) {
+        console.log(`Duration: ${Math.round(result.totalDuration as number)}ms`);
+        const steps = result.steps as unknown as Rec[];
+        console.log(`Steps: ${steps.length}`);
+        for (const step of steps) {
           const status = step.success ? "OK" : "FAIL";
-          console.log(`  [${status}] ${step.stepId} (${Math.round(step.duration)}ms)`);
+          console.log(`  [${status}] ${step.stepId} (${Math.round(step.duration as number)}ms)`);
           if (step.error) console.log(`    Error: ${step.error}`);
         }
       } else if (sub === "delete") {
@@ -408,7 +416,7 @@ async function main() {
       if (!sub || sub === "list") {
         const scope = rest[1];
         const path = scope ? `/variables?scope=${scope}` : "/variables";
-        const vars = await request(path);
+        const vars = await request<Rec[]>(path);
         if (vars.length === 0) {
           console.log("No variables set.");
         } else {
@@ -481,7 +489,8 @@ async function main() {
         body: JSON.stringify({ package: pkg }),
       });
       if (result.success) {
-        console.log(`Installed! Skills: ${result.skills.join(", ") || "none registered"}`);
+        const skillList = (result.skills as Val[]) ?? [];
+        console.log(`Installed! Skills: ${skillList.join(", ") || "none registered"}`);
       } else {
         console.error(`Failed: ${result.error}`);
       }
@@ -508,13 +517,13 @@ async function main() {
     }
 
     case "plugins": {
-      const plugins = await request("/plugins");
+      const plugins = await request<Rec[]>("/plugins");
       if (plugins.length === 0) {
         console.log("No plugins installed.");
       } else {
         console.log("\nInstalled plugins:");
         for (const p of plugins) {
-          const skillIds = JSON.parse(p.skills);
+          const skillIds = JSON.parse(p.skills as string) as string[];
           console.log(`  ${p.name}@${p.version} (skills: ${skillIds.join(", ") || "none"})`);
         }
       }
@@ -552,11 +561,12 @@ async function main() {
 
     case "health": {
       const data = await request("/health");
-      console.log(`Status: ${data.status}, Uptime: ${Math.round(data.uptime)}s`);
-      if (data.checks) {
-        for (const check of data.checks) {
+      console.log(`Status: ${data.status}, Uptime: ${Math.round(data.uptime as number)}s`);
+      const checks = data.checks as Rec[] | undefined;
+      if (checks) {
+        for (const check of checks) {
           const icon = check.status === "healthy" ? "OK" : check.status === "degraded" ? "WARN" : "FAIL";
-          const latency = check.latencyMs ? ` (${Math.round(check.latencyMs)}ms)` : "";
+          const latency = check.latencyMs ? ` (${Math.round(check.latencyMs as number)}ms)` : "";
           console.log(`  [${icon}] ${check.name}${latency} ${check.message ?? ""}`);
         }
       }

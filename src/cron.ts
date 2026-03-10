@@ -57,9 +57,9 @@ function parseField(raw: string, range: { min: number; max: number }, fieldIndex
       let end = range.max;
 
       if (stepMatch[1] !== "*") {
-        const [s, e] = stepMatch[1].split("-").map(Number);
-        start = s;
-        end = e;
+        const [s, e] = stepMatch[1]!.split("-").map(Number);
+        start = s!;
+        end = e!;
       }
 
       for (let i = start; i <= end; i += step) {
@@ -94,11 +94,11 @@ export function parseCron(expression: string): CronSchedule {
   }
 
   return {
-    minute: parseField(parts[0], FIELD_RANGES[0], 0),
-    hour: parseField(parts[1], FIELD_RANGES[1], 1),
-    dayOfMonth: parseField(parts[2], FIELD_RANGES[2], 2),
-    month: parseField(parts[3], FIELD_RANGES[3], 3),
-    dayOfWeek: parseField(parts[4], FIELD_RANGES[4], 4),
+    minute: parseField(parts[0]!, FIELD_RANGES[0]!, 0),
+    hour: parseField(parts[1]!, FIELD_RANGES[1]!, 1),
+    dayOfMonth: parseField(parts[2]!, FIELD_RANGES[2]!, 2),
+    month: parseField(parts[3]!, FIELD_RANGES[3]!, 3),
+    dayOfWeek: parseField(parts[4]!, FIELD_RANGES[4]!, 4),
   };
 }
 

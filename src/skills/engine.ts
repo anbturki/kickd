@@ -106,7 +106,7 @@ class SkillEngine {
     const chainId = crypto.randomUUID();
 
     for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
+      const step = steps[i]!;
       const input = step.mapInput ? step.mapInput(prevOutput) : prevOutput;
       const result = await this.run(step.skillId, input, chainId);
 
@@ -159,15 +159,17 @@ function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
 }
 
 function getZodTypeName(schema: z.ZodType): string {
+  const s = schema as unknown as Record<string, unknown>;
+
   // Zod v4: check _zod.def.type
-  const zod = (schema as Record<string, unknown>)._zod as Record<string, unknown> | undefined;
+  const zod = s._zod as Record<string, unknown> | undefined;
   if (zod?.def && typeof zod.def === "object") {
     const def = zod.def as Record<string, unknown>;
     if (typeof def.type === "string") return def.type;
   }
 
   // Zod v3 fallback: _def.typeName
-  const _def = (schema as Record<string, unknown>)._def as Record<string, unknown> | undefined;
+  const _def = s._def as Record<string, unknown> | undefined;
   if (_def?.typeName && typeof _def.typeName === "string") {
     return _def.typeName.replace("Zod", "").toLowerCase();
   }

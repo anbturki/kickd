@@ -34,7 +34,7 @@ export function createMcpServer() {
     "Run a registered automation task by its ID",
     {
       taskId: z.string().describe("The ID of the task to run"),
-      params: z.record(z.unknown()).optional().describe("Optional parameters"),
+      params: z.record(z.string(), z.unknown()).optional().describe("Optional parameters"),
     },
     async ({ taskId, params }) => {
       const result = await registry.run(taskId, params);
@@ -66,7 +66,7 @@ export function createMcpServer() {
     "Run a registered skill with the given input",
     {
       skillId: z.string().describe("The ID of the skill to run"),
-      input: z.record(z.unknown()).optional().describe("Input parameters for the skill"),
+      input: z.record(z.string(), z.unknown()).optional().describe("Input parameters for the skill"),
     },
     async ({ skillId, input }) => {
       const result = await skills.run(skillId, input ?? {});
@@ -81,7 +81,7 @@ export function createMcpServer() {
     "Chain multiple skills together, piping output from one to the next",
     {
       steps: z
-        .array(z.object({ skillId: z.string(), inputOverrides: z.record(z.unknown()).optional() }))
+        .array(z.object({ skillId: z.string(), inputOverrides: z.record(z.string(), z.unknown()).optional() }))
         .describe("Ordered list of skills to run in sequence"),
     },
     async ({ steps }) => {
@@ -166,7 +166,7 @@ export function createMcpServer() {
     {
       name: z.string().describe("Friendly name for the credential"),
       typeId: z.string().describe("Credential type (github, slack, bearer, api_key, etc.)"),
-      data: z.record(z.unknown()).describe("Credential data (sensitive fields are encrypted)"),
+      data: z.record(z.string(), z.unknown()).describe("Credential data (sensitive fields are encrypted)"),
       tags: z.array(z.string()).optional().describe("Optional tags"),
     },
     async ({ name, typeId, data, tags }) => {
@@ -217,7 +217,7 @@ export function createMcpServer() {
       sourceId: z.string().optional().describe("Only trigger for this specific source ID"),
       actionType: z.enum(["run_task", "run_skill"]).describe("What to do when the event fires"),
       targetId: z.string().describe("ID of the task or skill to run"),
-      actionInput: z.record(z.unknown()).optional().describe("Input to pass to the action"),
+      actionInput: z.record(z.string(), z.unknown()).optional().describe("Input to pass to the action"),
     },
     async ({ eventType, sourceId, actionType, targetId, actionInput }) => {
       const id = crypto.randomUUID().slice(0, 8);
@@ -246,7 +246,7 @@ export function createMcpServer() {
     "Run a workflow by its ID",
     {
       workflowId: z.string().describe("The workflow ID to run"),
-      input: z.record(z.unknown()).optional().describe("Initial input for the workflow"),
+      input: z.record(z.string(), z.unknown()).optional().describe("Initial input for the workflow"),
     },
     async ({ workflowId, input }) => {
       const result = await workflows.run(workflowId, input);

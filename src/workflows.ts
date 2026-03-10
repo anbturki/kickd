@@ -180,18 +180,20 @@ class WorkflowEngine {
             const subResults: StepResult[] = [];
             let allSuccess = true;
             for (let i = 0; i < parallelResults.length; i++) {
-              const pr = parallelResults[i];
-              const subStepId = step.parallel![i];
+              const pr = parallelResults[i]!;
+              const subStepId = step.parallel![i]!;
               if (pr.status === "fulfilled") {
-                subResults.push(pr.value);
-                stepResults.set(subStepId, pr.value);
-                if (!pr.value.success) allSuccess = false;
+                const fulfilled = pr as PromiseFulfilledResult<StepResult>;
+                subResults.push(fulfilled.value);
+                stepResults.set(subStepId, fulfilled.value);
+                if (!fulfilled.value.success) allSuccess = false;
               } else {
+                const rejected = pr as PromiseRejectedResult;
                 const failResult: StepResult = {
                   stepId: subStepId,
                   success: false,
                   output: null,
-                  error: pr.reason?.message ?? String(pr.reason),
+                  error: rejected.reason?.message ?? String(rejected.reason),
                   duration: 0,
                 };
                 subResults.push(failResult);
@@ -300,7 +302,7 @@ function resolveInput(
 
         if (trimmed.startsWith("steps.")) {
           const parts = trimmed.slice(6).split(".");
-          const stepId = parts[0];
+          const stepId = parts[0]!;
           const field = parts.slice(1).join(".");
           const stepResult = stepResults.get(stepId);
           if (stepResult) {
@@ -344,7 +346,7 @@ function evaluateCondition(
     }
     if (trimmed.startsWith("steps.")) {
       const parts = trimmed.slice(6).split(".");
-      const stepId = parts[0];
+      const stepId = parts[0]!;
       const field = parts.slice(1).join(".");
       const stepResult = stepResults.get(stepId);
       return JSON.stringify(stepResult ? getNestedValue(stepResult.output, field) : null);

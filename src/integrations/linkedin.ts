@@ -64,10 +64,10 @@ export async function refreshAccessToken(
     }),
   });
 
-  const data = await response.json();
+  const data = await response.json() as Record<string, unknown>;
 
   if (response.ok) {
-    return { accessToken: data.access_token, expiresIn: data.expires_in };
+    return { accessToken: data.access_token as string, expiresIn: data.expires_in as number };
   }
 
   return { error: `Token refresh failed: ${JSON.stringify(data)}` };

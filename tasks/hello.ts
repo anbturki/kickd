@@ -10,7 +10,7 @@ export const task: Task = {
 };
 
 export async function handler(): Promise<TaskResult> {
-  const message = `Hello from automation! Current time: ${new Date().toISOString()}`;
+  const message = `Hello from kickd! Current time: ${new Date().toISOString()}`;
   console.log(message);
   return {
     success: true,

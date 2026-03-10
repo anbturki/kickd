@@ -1,17 +1,23 @@
 # kickd
 
-Background automation daemon with a built-in skill engine, task scheduler, HTTP API, CLI, and MCP server for Claude Code integration.
-
-Run tasks on a schedule, chain composable skills together, and communicate bidirectionally with Claude Code.
+Background automation daemon with task scheduling, composable skills, credential vault, event system, webhook triggers, notifications, plugin ecosystem, and bidirectional Claude Code integration via MCP.
 
 ## Features
 
-- **Task scheduler** — run tasks on intervals (`1h`, `30m`) or daily at a specific time (`at:09:00`)
-- **Skill engine** — composable, chainable units of work with typed inputs/outputs (via Zod)
-- **MCP server** — expose tasks and skills as tools that Claude Code can call directly
+- **Task scheduler** — intervals (`1h`, `30m`), daily at time (`at:09:00`), or full cron (`0 9 * * MON-FRI`)
+- **Skill engine** — composable, chainable units of work with Zod-validated inputs/outputs
+- **Credential vault** — encrypted credential storage with 14+ built-in types (GitHub, Slack, AWS, Stripe, etc.)
+- **Event system** — reactive rules: "when task X completes, run skill Y"
+- **Webhook triggers** — trigger tasks/skills via HTTP webhooks with HMAC signing
+- **Notifications** — Slack, Discord, or generic webhook alerts on task success/failure
+- **Retry with backoff** — configurable retry with exponential backoff and jitter
+- **SQLite persistence** — all task runs, skill executions, and events logged and queryable
+- **MCP server** — expose everything as tools Claude Code can call directly
 - **Claude Code bridge** — call Claude Code CLI from your automations
-- **HTTP API** — manage tasks, skills, and the daemon over HTTP
-- **CLI** — interact with the running daemon from the terminal
+- **Plugin system** — install skills from npm (`kickd install <package>`)
+- **HTTP API** — full REST API for all operations
+- **CLI** — manage the daemon from the terminal
+- **Auth** — optional bearer token authentication
 
 ## Requirements
 
@@ -21,69 +27,89 @@ Run tasks on a schedule, chain composable skills together, and communicate bidir
 ## Quick Start
 
 ```bash
-# Clone the repo
 git clone https://github.com/anbturki/kickd.git
 cd kickd
-
-# Install dependencies
 bun install
-
-# Start the daemon
 bun run start
 ```
 
-The daemon starts on port `7400` by default. Verify with:
+Verify: `curl http://localhost:7400/health`
+
+## CLI Reference
 
 ```bash
-curl http://localhost:7400/health
+# Tasks
+kickd list                              # List all tasks
+kickd run <id> [json]                   # Run a task
+kickd history <id>                      # Task run history
+
+# Skills
+kickd skills                            # List all skills
+kickd skill <id> [json]                 # Run a skill
+
+# Credentials
+kickd creds list                        # List stored credentials
+kickd creds types                       # List available types (github, slack, aws, ...)
+kickd creds add <name> <type> <json>    # Store a credential (encrypted)
+kickd creds get <name>                  # View credential (sensitive values redacted)
+kickd creds test <name>                 # Test connectivity
+kickd creds delete <name>              # Delete a credential
+
+# Webhooks
+kickd webhook list                      # List webhooks
+kickd webhook create <name> task:<id>   # Create a webhook
+kickd webhook delete <id>               # Delete a webhook
+
+# Events
+kickd events                            # Show recent events
+kickd events rules                      # List reactive rules
+kickd events add <event> run_task:<id>  # Add a rule
+
+# Notifications
+kickd notify add slack <url>            # Add Slack notifications
+kickd notify add discord <url>          # Add Discord notifications
+
+# Plugins
+kickd install <package>                 # Install a plugin from npm
+kickd plugins                           # List installed plugins
+
+# Other
+kickd stats                             # Global statistics
+kickd health                            # Daemon status
+kickd ask "prompt"                      # Ask Claude Code
 ```
 
-## Usage
-
-### CLI
-
-The CLI talks to the running daemon over HTTP.
-
-```bash
-# List all tasks
-bun run cli list
-
-# List all skills
-bun run cli skills
-
-# Run a task
-bun run cli run hello
-
-# Run a skill with JSON input
-bun run cli skill generate-content '{"platform":"linkedin","topics":["developer productivity"]}'
-
-# Ask Claude Code a question
-bun run cli ask "What files are in this directory?"
-
-# Check daemon health
-bun run cli health
-```
-
-### HTTP API
-
-All endpoints are available at `http://localhost:7400`.
+## HTTP API
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/health` | Daemon status, uptime, task/skill counts |
-| `GET` | `/tasks` | List all registered tasks |
-| `GET` | `/tasks/:id` | Get a specific task |
-| `POST` | `/tasks/:id/run` | Run a task (accepts JSON body with params) |
-| `GET` | `/skills` | List all registered skills |
-| `POST` | `/skills/:id/run` | Run a skill (accepts JSON body with input) |
-| `POST` | `/skills/chain` | Chain skills (accepts `{ steps: [...] }`) |
-| `POST` | `/claude` | Send a prompt to Claude Code CLI |
+| `GET` | `/health` | Daemon status |
+| `GET` | `/stats` | Global statistics |
+| `GET` | `/tasks` | List tasks |
+| `POST` | `/tasks/:id/run` | Run a task |
+| `GET` | `/tasks/:id/history` | Task run history |
+| `GET` | `/skills` | List skills |
+| `POST` | `/skills/:id/run` | Run a skill |
+| `POST` | `/skills/chain` | Chain skills |
+| `GET` | `/credentials` | List credentials (redacted) |
+| `POST` | `/credentials` | Store a credential |
+| `GET` | `/credentials/types` | List credential types |
+| `POST` | `/credentials/:id/test` | Test credential |
+| `GET` | `/hooks` | List webhooks |
+| `POST` | `/hooks` | Create webhook |
+| `POST` | `/hooks/:id` | Trigger webhook |
+| `GET` | `/events` | Event log |
+| `GET` | `/events/rules` | List event rules |
+| `POST` | `/events/rules` | Create event rule |
+| `GET` | `/notifications/channels` | List notification channels |
+| `POST` | `/notifications/channels` | Add notification channel |
+| `GET` | `/plugins` | List installed plugins |
+| `POST` | `/plugins/install` | Install plugin |
+| `POST` | `/claude` | Send prompt to Claude Code |
 
-### MCP Server (Claude Code Integration)
+## MCP Server (Claude Code)
 
-kickd includes an MCP server so Claude Code can call your tasks and skills directly.
-
-Add this to your Claude Code MCP config (`~/.claude.json` or project `.mcp.json`):
+Add to `~/.claude.json` or project `.mcp.json`:
 
 ```json
 {
@@ -97,20 +123,9 @@ Add this to your Claude Code MCP config (`~/.claude.json` or project `.mcp.json`
 }
 ```
 
-Once connected, Claude Code gets these tools:
-
-| Tool | Description |
-|------|-------------|
-| `list_automations` | List all tasks and skills |
-| `run_automation` | Run a task by ID |
-| `run_skill` | Run a skill with input |
-| `chain_skills` | Chain multiple skills in sequence |
-| `run_command` | Execute a shell command |
-| `ask_claude` | Send a prompt to Claude Code CLI |
+Available MCP tools: `list_automations`, `run_automation`, `run_skill`, `chain_skills`, `list_credentials`, `store_credential`, `test_credential`, `list_credential_types`, `list_webhooks`, `create_webhook`, `list_event_rules`, `create_event_rule`, `get_task_history`, `get_stats`, `run_command`, `ask_claude`.
 
 ## Adding Tasks
-
-Create a file in `tasks/` that exports `task` (metadata) and `handler` (async function).
 
 ```ts
 // tasks/my-task.ts
@@ -121,18 +136,14 @@ export const task: Task = {
   name: "My Task",
   description: "Does something useful",
   handler: "tasks/my-task.ts",
-  schedule: "1h",       // run every hour
-  // schedule: "at:09:00", // or daily at 9:00 AM
+  schedule: "0 9 * * MON-FRI", // weekdays at 9am (full cron)
+  retry: { maxAttempts: 3, baseDelayMs: 1000, maxDelayMs: 30000, backoffMultiplier: 2 },
   enabled: true,
   status: "idle",
 };
 
 export async function handler(params?: Record<string, unknown>): Promise<TaskResult> {
-  return {
-    success: true,
-    output: "Task completed",
-    duration: 0,
-  };
+  return { success: true, output: "Done", duration: 0 };
 }
 ```
 
@@ -144,11 +155,10 @@ export async function handler(params?: Record<string, unknown>): Promise<TaskRes
 | `Nm` | `5m` | Every N minutes |
 | `Nh` | `1h` | Every N hours |
 | `Nd` | `1d` | Every N days |
-| `at:HH:MM` | `at:09:00` | Daily at specific time (local timezone) |
+| `at:HH:MM` | `at:09:00` | Daily at specific time |
+| Cron | `0 9 * * MON-FRI` | Standard 5-field cron (min hour dom mon dow) |
 
 ## Adding Skills
-
-Skills are composable building blocks with typed inputs and outputs. Create a file in `skills/` — they self-register on import.
 
 ```ts
 // skills/my-skill.ts
@@ -159,60 +169,89 @@ skills.register({
   id: "my-skill",
   name: "My Skill",
   description: "A composable unit of work",
-  input: z.object({
-    message: z.string().describe("Input message"),
-  }),
-  output: z.object({
-    result: z.string(),
-  }),
+  input: z.object({ message: z.string() }),
+  output: z.object({ result: z.string() }),
   execute: async (input) => {
     return { result: `Processed: ${input.message}` };
   },
 });
 ```
 
-### Chaining skills
+## Credential Vault
 
-Skills can be chained via the HTTP API or MCP. The output of one skill feeds into the next:
+Store credentials securely with AES-256-CBC encryption at rest.
 
 ```bash
-curl -X POST http://localhost:7400/skills/chain \
+# Generate an encryption key
+openssl rand -base64 32
+# Add to .env: KICKD_ENCRYPTION_KEY=<generated-key>
+
+# Store a GitHub token
+kickd creds add my-github github '{"token":"ghp_abc123..."}'
+
+# Store Slack credentials
+kickd creds add my-slack slack '{"botToken":"xoxb-...", "webhookUrl":"https://hooks.slack.com/..."}'
+
+# Test connectivity
+kickd creds test my-github
+```
+
+Built-in credential types: `bearer`, `api_key`, `basic_auth`, `oauth2`, `github`, `slack`, `discord`, `stripe`, `openai`, `anthropic`, `linkedin`, `sendgrid`, `aws`, `custom`.
+
+## Event System
+
+Create reactive rules — when something happens, do something else:
+
+```bash
+# When task "hello" completes, run the "disk-usage" task
+kickd events add task.completed run_task:disk-usage --source hello
+
+# When any skill fails, run a notification task
+kickd events add skill.failed run_task:alert
+```
+
+Event types: `task.completed`, `task.failed`, `task.retry`, `skill.completed`, `skill.failed`, `webhook.triggered`.
+
+## Webhook Triggers
+
+Trigger tasks externally via HTTP:
+
+```bash
+# Create a webhook for the "hello" task
+kickd webhook create deploy-hook task:hello
+
+# Trigger it (e.g., from GitHub Actions, Stripe, etc.)
+curl -X POST http://localhost:7400/hooks/<webhook-id> \
   -H "Content-Type: application/json" \
-  -d '{
-    "steps": [
-      { "skillId": "generate-content", "input": {"platform": "linkedin", "topics": ["AI"]} },
-      { "skillId": "post-linkedin" }
-    ]
-  }'
+  -d '{}'
 ```
 
-Tasks can also chain skills programmatically:
+## Notifications
 
-```ts
-const generated = await skills.run("generate-content", { platform: "linkedin", topics: ["AI"] });
-const posted = await skills.run("post-linkedin", { content: generated.output.content });
+Get alerted when tasks fail:
+
+```bash
+# Via CLI
+kickd notify add slack https://hooks.slack.com/services/...
+kickd notify add discord https://discord.com/api/webhooks/...
+
+# Or via environment variables
+KICKD_NOTIFY_SLACK_URL=https://hooks.slack.com/services/...
+KICKD_NOTIFY_DISCORD_URL=https://discord.com/api/webhooks/...
 ```
 
-## Included Examples
+## Plugins
 
-### Tasks
-| Task | Schedule | Description |
-|------|----------|-------------|
-| `hello` | manual | Simple hello world example |
-| `disk-usage` | every 1h | Reports home directory disk usage |
-| `linkedin-post` | daily at 09:00 | Generates and posts content to LinkedIn |
+Install skills from npm:
 
-### Skills
-| Skill | Description |
-|-------|-------------|
-| `generate-content` | Generates social media content using Claude Code CLI |
-| `post-linkedin` | Publishes a text post to the LinkedIn API |
+```bash
+kickd install kickd-skill-example
+kickd plugins
+```
+
+Plugin packages can export a `register(skills)` function or a `skills` array.
 
 ## Configuration
-
-### Environment variables
-
-Copy the example and fill in your values:
 
 ```bash
 cp .env.example .env
@@ -220,57 +259,24 @@ cp .env.example .env
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AUTOMATION_PORT` | `7400` | HTTP API port |
-| `LINKEDIN_ACCESS_TOKEN` | — | LinkedIn OAuth access token |
-| `LINKEDIN_PERSON_URN` | — | Your LinkedIn person URN (e.g. `urn:li:person:abc123`) |
-| `LINKEDIN_CLIENT_ID` | — | LinkedIn app client ID (for token refresh) |
-| `LINKEDIN_CLIENT_SECRET` | — | LinkedIn app client secret (for token refresh) |
-| `LINKEDIN_REFRESH_TOKEN` | — | LinkedIn refresh token (for token refresh) |
+| `KICKD_PORT` | `7400` | HTTP API port |
+| `KICKD_API_TOKEN` | — | Bearer token for API auth (optional) |
+| `KICKD_ENCRYPTION_KEY` | — | AES-256 key for credential vault |
+| `KICKD_NOTIFY_SLACK_URL` | — | Slack webhook for notifications |
+| `KICKD_NOTIFY_DISCORD_URL` | — | Discord webhook for notifications |
+| `KICKD_NOTIFY_WEBHOOK_URL` | — | Generic webhook for notifications |
 
-### LinkedIn API Setup
+## Running in Background
 
-1. Create an app at [developer.linkedin.com](https://developer.linkedin.com/)
-2. Request the **Share on LinkedIn** product (grants `w_member_social` scope)
-3. Generate an access token with `w_member_social` scope
-4. Find your Person URN via the LinkedIn API: `GET https://api.linkedin.com/v2/userinfo`
-5. Add credentials to your `.env` file
-
-## Running in the Background
-
-### Using launchd (macOS)
-
-Create `~/Library/LaunchAgents/com.kickd.daemon.plist`:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>com.kickd.daemon</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>/path/to/bun</string>
-        <string>run</string>
-        <string>start</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>/path/to/kickd</string>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-</dict>
-</plist>
-```
-
-Then load it:
+### macOS (launchd)
 
 ```bash
+# Create plist at ~/Library/LaunchAgents/com.kickd.daemon.plist
+# then:
 launchctl load ~/Library/LaunchAgents/com.kickd.daemon.plist
 ```
 
-### Using pm2
+### pm2
 
 ```bash
 pm2 start "bun run start" --name kickd
@@ -280,20 +286,20 @@ pm2 save
 ## Architecture
 
 ```
-┌──────────────┐    MCP (stdio)    ┌───────────────────────────┐
-│  Claude Code │ ────────────────► │                           │
-│              │ ◄──────────────── │        kickd daemon       │
-└──────────────┘                   │                           │
-                                   │  ┌─────────┐ ┌────────┐  │
-┌──────────────┐    HTTP :7400     │  │  Tasks   │ │ Skills │  │
-│   You (CLI)  │ ────────────────► │  │ Registry │ │ Engine │  │
-│              │ ◄──────────────── │  └─────────┘ └────────┘  │
-└──────────────┘                   │                           │
-                                   │  ┌─────────────────────┐  │
-┌──────────────┐    claude CLI     │  │   Claude Bridge     │  │
-│  Claude Code │ ◄──────────────── │  │   (subprocess)      │  │
-│     CLI      │                   │  └─────────────────────┘  │
-└──────────────┘                   └───────────────────────────┘
+┌──────────────┐    MCP (stdio)    ┌─────────────────────────────────┐
+│  Claude Code │ ────────────────► │          kickd daemon           │
+│              │ ◄──────────────── │                                 │
+└──────────────┘                   │  ┌───────┐ ┌───────┐ ┌──────┐  │
+                                   │  │ Tasks │ │Skills │ │Creds │  │
+┌──────────────┐    HTTP :7400     │  └───┬───┘ └───┬───┘ └──────┘  │
+│   You (CLI)  │ ────────────────► │      │         │               │
+│              │ ◄──────────────── │  ┌───┴─────────┴───┐           │
+└──────────────┘                   │  │   Event Bus     │           │
+                                   │  └───┬─────────┬───┘           │
+┌──────────────┐    Webhooks       │  ┌───┴───┐ ┌───┴────┐         │
+│   External   │ ────────────────► │  │Notify │ │SQLite  │         │
+│   Services   │                   │  └───────┘ └────────┘         │
+└──────────────┘                   └─────────────────────────────────┘
 ```
 
 ## License

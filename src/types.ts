@@ -1,9 +1,12 @@
+import type { RetryConfig } from "./retry";
+
 export interface Task {
   id: string;
   name: string;
   description: string;
-  handler: string; // module path to the handler
-  schedule?: string; // cron expression
+  handler: string;
+  schedule?: string; // interval ("1h"), daily ("at:09:00"), or cron ("0 9 * * MON-FRI")
+  retry?: RetryConfig;
   enabled: boolean;
   lastRun?: Date;
   nextRun?: Date;
@@ -22,6 +25,7 @@ export interface AutomationConfig {
   mcpPort: number;
   tasksDir: string;
   logsDir: string;
+  dbPath: string;
 }
 
 export interface ClaudeBridgeRequest {

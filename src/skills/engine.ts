@@ -1,4 +1,6 @@
 import type { z } from "zod";
+import { startSkillRun, finishSkillRun, getSkillHistory } from "../db";
+import { eventBus } from "../events";
 
 interface SkillDefinition<TInput extends z.ZodType, TOutput extends z.ZodType> {
   id: string;
@@ -46,7 +48,7 @@ class SkillEngine {
     console.log(`  Registered skill: ${definition.name}`);
   }
 
-  async run(skillId: string, input: unknown): Promise<{ success: boolean; output: unknown; error?: string }> {
+  async run(skillId: string, input: unknown, chainId?: string): Promise<{ success: boolean; output: unknown; error?: string }> {
     const skill = this.skills.get(skillId);
     if (!skill) {
       return { success: false, output: null, error: `Skill "${skillId}" not found` };
@@ -57,16 +59,40 @@ class SkillEngine {
       return { success: false, output: null, error: `Invalid input: ${validation.error}` };
     }
 
+    const runId = startSkillRun(skillId, input, chainId);
+    const start = performance.now();
+
     try {
       const output = await skill.execute(validation.data);
+      const duration = performance.now() - start;
+
+      finishSkillRun(runId, "completed", output, null, duration);
+
+      eventBus.emit({
+        type: "skill.completed",
+        sourceType: "skill",
+        sourceId: skillId,
+        payload: { output, duration },
+      });
+
       return { success: true, output };
     } catch (err) {
+      const duration = performance.now() - start;
       const error = err instanceof Error ? err.message : String(err);
+
+      finishSkillRun(runId, "failed", null, error, duration);
+
+      eventBus.emit({
+        type: "skill.failed",
+        sourceType: "skill",
+        sourceId: skillId,
+        payload: { error, duration },
+      });
+
       return { success: false, output: null, error };
     }
   }
 
-  // Chain multiple skills: output of one feeds into the next
   async chain(steps: Array<{ skillId: string; mapInput?: (prev: unknown) => unknown }>): Promise<{
     success: boolean;
     output: unknown;
@@ -74,11 +100,12 @@ class SkillEngine {
     step?: number;
   }> {
     let prevOutput: unknown = {};
+    const chainId = crypto.randomUUID();
 
     for (let i = 0; i < steps.length; i++) {
       const step = steps[i];
       const input = step.mapInput ? step.mapInput(prevOutput) : prevOutput;
-      const result = await this.run(step.skillId, input);
+      const result = await this.run(step.skillId, input, chainId);
 
       if (!result.success) {
         return { success: false, output: result.output, error: result.error, step: i };
@@ -102,10 +129,17 @@ class SkillEngine {
   get(skillId: string): RegisteredSkill | undefined {
     return this.skills.get(skillId);
   }
+
+  history(skillId: string, limit = 20) {
+    return getSkillHistory(skillId, limit);
+  }
+
+  unregister(skillId: string) {
+    this.skills.delete(skillId);
+  }
 }
 
 function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
-  // Lightweight schema extraction for display purposes
   try {
     if ("shape" in schema && typeof schema.shape === "object") {
       const shape = schema.shape as Record<string, z.ZodType>;
@@ -128,4 +162,5 @@ function getZodTypeName(schema: z.ZodType): string {
   return "unknown";
 }
 
+export { SkillEngine };
 export const skills = new SkillEngine();

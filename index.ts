@@ -1,4 +1,11 @@
 export { registry } from "./src/tasks/registry";
+export { skills, SkillEngine } from "./src/skills/engine";
 export { askClaude } from "./src/bridge/claude";
 export { createMcpServer } from "./src/mcp/server";
+export { eventBus } from "./src/events";
+export { withRetry } from "./src/retry";
 export type { Task, TaskResult, ClaudeBridgeRequest, ClaudeBridgeResponse } from "./src/types";
+export type { RetryConfig } from "./src/retry";
+export type { KickdEvent } from "./src/events";
+export { resolveCredential, buildAuthHeaders, listCredentials, getCredentialTypes } from "./src/credentials/store";
+export type { Credential, CredentialTypeDefinition, CredentialSummary } from "./src/credentials/types";

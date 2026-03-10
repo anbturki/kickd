@@ -11,6 +11,12 @@ import {
   getCredentialAudit,
   buildAuthHeaders,
 } from "../credentials/store";
+import {
+  startOAuth2Flow,
+  exchangeCode,
+  getPendingFlow,
+  removePendingFlow,
+} from "../credentials/oauth2";
 
 export const credentialRoutes = new Hono();
 
@@ -106,4 +112,80 @@ credentialRoutes.post("/:id/test", async (c) => {
 credentialRoutes.get("/:id/audit", (c) => {
   const limit = Number(c.req.query("limit") ?? "50");
   return c.json(getCredentialAudit(c.req.param("id"), limit));
+});
+
+// ── OAuth2 Flow ──
+
+credentialRoutes.post("/oauth2/start", async (c) => {
+  const body = await c.req.json();
+
+  if (!body.credentialName || !body.typeId || !body.authorizeUrl || !body.tokenUrl || !body.clientId || !body.clientSecret || !body.redirectUri) {
+    return c.json({ error: "credentialName, typeId, authorizeUrl, tokenUrl, clientId, clientSecret, and redirectUri are required" }, 400);
+  }
+
+  const { authUrl, state } = startOAuth2Flow({
+    credentialName: body.credentialName,
+    typeId: body.typeId,
+    authorizeUrl: body.authorizeUrl,
+    tokenUrl: body.tokenUrl,
+    clientId: body.clientId,
+    clientSecret: body.clientSecret,
+    redirectUri: body.redirectUri,
+    scope: body.scope,
+  });
+
+  return c.json({ authUrl, state });
+});
+
+credentialRoutes.get("/oauth2/callback", async (c) => {
+  const code = c.req.query("code");
+  const state = c.req.query("state");
+  const error = c.req.query("error");
+
+  if (error) {
+    return c.json({ error: `OAuth2 authorization denied: ${error}` }, 400);
+  }
+
+  if (!code || !state) {
+    return c.json({ error: "Missing code or state parameter" }, 400);
+  }
+
+  const flow = getPendingFlow(state);
+  if (!flow) {
+    return c.json({ error: "Unknown or expired OAuth2 flow" }, 400);
+  }
+
+  try {
+    const tokens = await exchangeCode({
+      tokenUrl: flow.tokenUrl,
+      code,
+      clientId: flow.clientId,
+      clientSecret: flow.clientSecret,
+      redirectUri: flow.redirectUri,
+    });
+
+    const data: Record<string, string> = {
+      clientId: flow.clientId,
+      clientSecret: flow.clientSecret,
+      tokenUrl: flow.tokenUrl,
+      accessToken: tokens.access_token,
+    };
+    if (tokens.refresh_token) data.refreshToken = tokens.refresh_token;
+    if (tokens.expires_in) {
+      data.expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString();
+    }
+
+    const credential = createCredential({
+      name: flow.credentialName,
+      typeId: flow.typeId,
+      data,
+    });
+
+    removePendingFlow(state);
+
+    return c.json({ success: true, credentialId: credential.id });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: message }, 500);
+  }
 });

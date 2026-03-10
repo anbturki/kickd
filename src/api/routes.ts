@@ -4,6 +4,10 @@ import { skills } from "../skills/engine";
 import { askClaude } from "../bridge/claude";
 import { webhookRoutes } from "./webhooks";
 import { credentialRoutes } from "./credentials";
+import { metricsRoutes } from "./metrics";
+import { workflowRoutes } from "./workflows";
+import { variableRoutes } from "./variables";
+import { queueRoutes } from "./queue";
 import * as db from "../db";
 import { installPlugin, uninstallPlugin } from "../plugins";
 
@@ -71,6 +75,18 @@ api.route("/hooks", webhookRoutes);
 // ── Credentials ──
 
 api.route("/credentials", credentialRoutes);
+
+// ── Workflows ──
+
+api.route("/workflows", workflowRoutes);
+
+// ── Variables ──
+
+api.route("/variables", variableRoutes);
+
+// ── Queue ──
+
+api.route("/queue", queueRoutes);
 
 // ── Events ──
 
@@ -185,17 +201,19 @@ api.post("/claude", async (c) => {
   return c.json(result);
 });
 
+// ── Metrics ──
+
+api.route("/metrics", metricsRoutes);
+
 // ── Stats & Health ──
 
 api.get("/stats", (c) => {
   return c.json(db.getGlobalStats());
 });
 
-api.get("/health", (c) => {
-  return c.json({
-    status: "ok",
-    uptime: process.uptime(),
-    tasks: registry.list().length,
-    skills: skills.list().length,
-  });
+api.get("/health", async (c) => {
+  const { getHealthReport } = await import("../health");
+  const report = await getHealthReport();
+  const statusCode = report.status === "healthy" ? 200 : report.status === "degraded" ? 200 : 503;
+  return c.json(report, statusCode);
 });

@@ -1,23 +1,32 @@
 # kickd
 
-Background automation daemon with task scheduling, composable skills, credential vault, event system, webhook triggers, notifications, plugin ecosystem, and bidirectional Claude Code integration via MCP.
+Background automation daemon with task scheduling, composable skills, workflow engine, credential vault, event system, webhook triggers, notifications, plugin ecosystem, and bidirectional Claude Code integration via MCP.
 
 ## Features
 
 - **Task scheduler** — intervals (`1h`, `30m`), daily at time (`at:09:00`), or full cron (`0 9 * * MON-FRI`)
 - **Skill engine** — composable, chainable units of work with Zod-validated inputs/outputs
+- **Workflow engine** — multi-step pipelines with conditions, parallel execution, and delays
 - **Credential vault** — encrypted credential storage with 14+ built-in types (GitHub, Slack, AWS, Stripe, etc.)
 - **Event system** — reactive rules: "when task X completes, run skill Y"
 - **Webhook triggers** — trigger tasks/skills via HTTP webhooks with HMAC signing
 - **Notifications** — Slack, Discord, or generic webhook alerts on task success/failure
+- **Variables** — persistent key-value store with scoping and template resolution
+- **Task queue** — priority-based concurrent execution with configurable limits
 - **Retry with backoff** — configurable retry with exponential backoff and jitter
-- **SQLite persistence** — all task runs, skill executions, and events logged and queryable
+- **Structured logging** — leveled logs with JSON mode and file output
+- **Prometheus metrics** — `/metrics` endpoint for monitoring
+- **Health checks** — detailed health reports (database, memory, queue, tasks)
+- **Rate limiting** — in-memory sliding window rate limiter
+- **Graceful shutdown** — clean SIGINT/SIGTERM handling
+- **SQLite persistence** — all runs, events, variables, and configs logged and queryable
 - **MCP server** — expose everything as tools Claude Code can call directly
 - **Claude Code bridge** — call Claude Code CLI from your automations
 - **Plugin system** — install skills from npm (`kickd install <package>`)
 - **HTTP API** — full REST API for all operations
-- **CLI** — manage the daemon from the terminal
+- **CLI** — manage everything from the terminal
 - **Auth** — optional bearer token authentication
+- **Docker** — ready-to-use Dockerfile
 
 ## Requirements
 
@@ -47,6 +56,17 @@ kickd history <id>                      # Task run history
 kickd skills                            # List all skills
 kickd skill <id> [json]                 # Run a skill
 
+# Workflows
+kickd workflow list                     # List workflows
+kickd workflow run <id> [json]          # Run a workflow
+kickd workflow delete <id>              # Delete a workflow
+
+# Variables
+kickd vars list [scope]                 # List variables
+kickd vars set <key> <value>            # Set a variable
+kickd vars get <key>                    # Get a variable
+kickd vars delete <key>                 # Delete a variable
+
 # Credentials
 kickd creds list                        # List stored credentials
 kickd creds types                       # List available types (github, slack, aws, ...)
@@ -69,13 +89,16 @@ kickd events add <event> run_task:<id>  # Add a rule
 kickd notify add slack <url>            # Add Slack notifications
 kickd notify add discord <url>          # Add Discord notifications
 
+# Queue
+kickd queue                             # Show queue stats
+
 # Plugins
 kickd install <package>                 # Install a plugin from npm
 kickd plugins                           # List installed plugins
 
 # Other
 kickd stats                             # Global statistics
-kickd health                            # Daemon status
+kickd health                            # Detailed health report
 kickd ask "prompt"                      # Ask Claude Code
 ```
 
@@ -83,18 +106,33 @@ kickd ask "prompt"                      # Ask Claude Code
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `GET` | `/health` | Daemon status |
+| `GET` | `/health` | Detailed health report |
 | `GET` | `/stats` | Global statistics |
+| `GET` | `/metrics` | Prometheus-compatible metrics |
 | `GET` | `/tasks` | List tasks |
 | `POST` | `/tasks/:id/run` | Run a task |
 | `GET` | `/tasks/:id/history` | Task run history |
+| `GET` | `/tasks/:id/stats` | Task statistics |
 | `GET` | `/skills` | List skills |
 | `POST` | `/skills/:id/run` | Run a skill |
+| `GET` | `/skills/:id/history` | Skill run history |
 | `POST` | `/skills/chain` | Chain skills |
+| `GET` | `/workflows` | List workflows |
+| `POST` | `/workflows` | Register a workflow |
+| `POST` | `/workflows/:id/run` | Run a workflow |
+| `DELETE` | `/workflows/:id` | Delete a workflow |
+| `GET` | `/variables` | List variables |
+| `GET` | `/variables/:key` | Get a variable |
+| `PUT` | `/variables/:key` | Set a variable |
+| `DELETE` | `/variables/:key` | Delete a variable |
+| `GET` | `/queue/stats` | Queue statistics |
+| `POST` | `/queue/clear` | Clear pending queue |
 | `GET` | `/credentials` | List credentials (redacted) |
 | `POST` | `/credentials` | Store a credential |
 | `GET` | `/credentials/types` | List credential types |
 | `POST` | `/credentials/:id/test` | Test credential |
+| `POST` | `/credentials/oauth2/start` | Start OAuth2 flow |
+| `GET` | `/credentials/oauth2/callback` | OAuth2 callback |
 | `GET` | `/hooks` | List webhooks |
 | `POST` | `/hooks` | Create webhook |
 | `POST` | `/hooks/:id` | Trigger webhook |
@@ -123,7 +161,7 @@ Add to `~/.claude.json` or project `.mcp.json`:
 }
 ```
 
-Available MCP tools: `list_automations`, `run_automation`, `run_skill`, `chain_skills`, `list_credentials`, `store_credential`, `test_credential`, `list_credential_types`, `list_webhooks`, `create_webhook`, `list_event_rules`, `create_event_rule`, `get_task_history`, `get_stats`, `run_command`, `ask_claude`.
+Available MCP tools: `list_automations`, `run_automation`, `run_skill`, `chain_skills`, `list_workflows`, `run_workflow`, `set_variable`, `get_variable`, `list_variables`, `queue_stats`, `list_credentials`, `store_credential`, `test_credential`, `list_credential_types`, `list_webhooks`, `create_webhook`, `list_event_rules`, `create_event_rule`, `get_task_history`, `get_stats`, `run_command`, `ask_claude`.
 
 ## Adding Tasks
 
@@ -177,6 +215,30 @@ skills.register({
 });
 ```
 
+## Workflows
+
+Define multi-step pipelines that combine tasks, skills, conditions, delays, and parallel execution:
+
+```bash
+curl -X POST http://localhost:7400/workflows \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": "deploy-pipeline",
+    "name": "Deploy Pipeline",
+    "description": "Build, test, and deploy",
+    "startStep": "build",
+    "steps": [
+      { "id": "build", "type": "task", "targetId": "build-app", "next": "test" },
+      { "id": "test", "type": "task", "targetId": "run-tests", "next": "check" },
+      { "id": "check", "type": "condition", "condition": "{{prev.success}} === true", "onTrue": "deploy", "onFalse": "notify-fail" },
+      { "id": "deploy", "type": "skill", "targetId": "deploy-prod" },
+      { "id": "notify-fail", "type": "skill", "targetId": "send-alert", "input": { "message": "Tests failed" } }
+    ]
+  }'
+```
+
+Step types: `task`, `skill`, `condition`, `delay`, `parallel`.
+
 ## Credential Vault
 
 Store credentials securely with AES-256-CBC encryption at rest.
@@ -210,7 +272,7 @@ kickd events add task.completed run_task:disk-usage --source hello
 kickd events add skill.failed run_task:alert
 ```
 
-Event types: `task.completed`, `task.failed`, `task.retry`, `skill.completed`, `skill.failed`, `webhook.triggered`.
+Event types: `task.completed`, `task.failed`, `task.retry`, `skill.completed`, `skill.failed`, `webhook.triggered`, `workflow.started`, `workflow.completed`, `workflow.failed`.
 
 ## Webhook Triggers
 
@@ -262,9 +324,22 @@ cp .env.example .env
 | `KICKD_PORT` | `7400` | HTTP API port |
 | `KICKD_API_TOKEN` | — | Bearer token for API auth (optional) |
 | `KICKD_ENCRYPTION_KEY` | — | AES-256 key for credential vault |
+| `KICKD_LOG_LEVEL` | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| `KICKD_LOG_FORMAT` | text | Log format: `text` or `json` |
+| `KICKD_LOG_FILE` | — | Path to log file (optional) |
+| `KICKD_RATE_LIMIT` | `true` | Set `false` to disable rate limiting |
+| `KICKD_QUEUE_CONCURRENCY` | `5` | Max concurrent queued tasks |
+| `KICKD_QUEUE_MAX_SIZE` | `1000` | Max queue size |
 | `KICKD_NOTIFY_SLACK_URL` | — | Slack webhook for notifications |
 | `KICKD_NOTIFY_DISCORD_URL` | — | Discord webhook for notifications |
 | `KICKD_NOTIFY_WEBHOOK_URL` | — | Generic webhook for notifications |
+
+## Docker
+
+```bash
+docker build -t kickd .
+docker run -p 7400:7400 -v kickd-data:/app/data kickd
+```
 
 ## Running in Background
 
@@ -286,20 +361,20 @@ pm2 save
 ## Architecture
 
 ```
-┌──────────────┐    MCP (stdio)    ┌─────────────────────────────────┐
-│  Claude Code │ ────────────────► │          kickd daemon           │
-│              │ ◄──────────────── │                                 │
-└──────────────┘                   │  ┌───────┐ ┌───────┐ ┌──────┐  │
-                                   │  │ Tasks │ │Skills │ │Creds │  │
-┌──────────────┐    HTTP :7400     │  └───┬───┘ └───┬───┘ └──────┘  │
-│   You (CLI)  │ ────────────────► │      │         │               │
-│              │ ◄──────────────── │  ┌───┴─────────┴───┐           │
-└──────────────┘                   │  │   Event Bus     │           │
-                                   │  └───┬─────────┬───┘           │
-┌──────────────┐    Webhooks       │  ┌───┴───┐ ┌───┴────┐         │
-│   External   │ ────────────────► │  │Notify │ │SQLite  │         │
-│   Services   │                   │  └───────┘ └────────┘         │
-└──────────────┘                   └─────────────────────────────────┘
+┌──────────────┐    MCP (stdio)    ┌───────────────────────────────────────┐
+│  Claude Code │ ────────────────► │            kickd daemon               │
+│              │ ◄──────────────── │                                       │
+└──────────────┘                   │  ┌───────┐ ┌───────┐ ┌────────────┐  │
+                                   │  │ Tasks │ │Skills │ │ Workflows  │  │
+┌──────────────┐    HTTP :7400     │  └───┬───┘ └───┬───┘ └──────┬─────┘  │
+│   You (CLI)  │ ────────────────► │      │         │            │        │
+│              │ ◄──────────────── │  ┌───┴─────────┴────────────┴───┐    │
+└──────────────┘                   │  │         Event Bus             │    │
+                                   │  └───┬─────────┬───────────┬────┘    │
+┌──────────────┐    Webhooks       │  ┌───┴───┐ ┌───┴────┐ ┌───┴──────┐  │
+│   External   │ ────────────────► │  │Notify │ │SQLite  │ │Cred Vault│  │
+│   Services   │                   │  └───────┘ └────────┘ └──────────┘  │
+└──────────────┘                   └───────────────────────────────────────┘
 ```
 
 ## License

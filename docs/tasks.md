@@ -11,7 +11,7 @@ Every task file must export two things:
 
 ```ts
 // tasks/cleanup.ts
-import type { Task, TaskResult } from "kickd/types";
+import type { Task, TaskResult } from "../src/types";
 
 export const task: Task = {
   id: "cleanup",
@@ -38,14 +38,41 @@ export async function handler(params?: Record<string, unknown>): Promise<TaskRes
 | `Nh` | `1h` | Every hour |
 | `Nd` | `1d` | Every day |
 | `at:HH:MM` | `at:09:00` | Daily at 9:00 AM (local time) |
+| Cron | `0 9 * * MON-FRI` | Standard 5-field cron expression |
+
+Full cron supports ranges (`1-5`), lists (`1,3,5`), steps (`*/15`), named days (`MON-FRI`), and named months (`JAN-DEC`).
 
 Omit `schedule` to make the task manual-only (triggered via CLI, API, or MCP).
+
+## Retry
+
+Add retry with exponential backoff:
+
+```ts
+export const task: Task = {
+  id: "flaky-api",
+  name: "Flaky API Call",
+  description: "Calls an unreliable API with retries",
+  handler: "tasks/flaky-api.ts",
+  schedule: "1h",
+  retry: {
+    maxAttempts: 3,      // try up to 3 times
+    baseDelayMs: 1000,   // start with 1 second
+    maxDelayMs: 30000,   // cap at 30 seconds
+    backoffMultiplier: 2 // double delay each retry
+  },
+  enabled: true,
+  status: "idle",
+};
+```
+
+Retry adds 0-25% jitter to prevent thundering herd. Each retry attempt is logged in the database with its attempt number.
 
 ## Running tasks manually
 
 ```bash
 # Via CLI
-bun run cli run cleanup
+kickd run cleanup
 
 # Via HTTP
 curl -X POST http://localhost:7400/tasks/cleanup/run
@@ -58,7 +85,7 @@ curl -X POST http://localhost:7400/tasks/cleanup/run \
 
 ## Passing parameters
 
-The `handler` receives an optional `params` object. You can pass parameters when running a task manually:
+The `handler` receives an optional `params` object:
 
 ```ts
 export async function handler(params?: Record<string, unknown>): Promise<TaskResult> {
@@ -79,7 +106,7 @@ export async function handler(params?: Record<string, unknown>): Promise<TaskRes
 Tasks can call skills for composable logic:
 
 ```ts
-import { skills } from "kickd/skills";
+import { skills } from "../src/skills/engine";
 
 export async function handler(): Promise<TaskResult> {
   const result = await skills.run("generate-content", {
@@ -95,6 +122,19 @@ export async function handler(): Promise<TaskResult> {
 }
 ```
 
+## Task history and stats
+
+```bash
+# View run history
+kickd history cleanup
+
+# Via HTTP
+curl http://localhost:7400/tasks/cleanup/history?limit=10
+curl http://localhost:7400/tasks/cleanup/stats
+```
+
+Stats include total runs, success/failure counts, average duration, and last run time.
+
 ## Task status
 
 Each task tracks its current state:
@@ -106,4 +146,12 @@ Each task tracks its current state:
 | `completed` | Last run succeeded |
 | `failed` | Last run failed |
 
-Check status via `GET /tasks/:id` or `bun run cli list`.
+## Events
+
+Tasks automatically emit events that can trigger other tasks or skills:
+
+- `task.completed` — task finished successfully
+- `task.failed` — task finished with an error
+- `task.retry` — task is being retried
+
+See [Events guide](./events.md) for setting up reactive rules.

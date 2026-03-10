@@ -352,6 +352,121 @@ async function main() {
       break;
     }
 
+    // ── Workflows ──
+
+    case "workflows":
+    case "workflow": {
+      const sub = rest[0];
+      if (!sub || sub === "list") {
+        const list = await request("/workflows");
+        if (list.length === 0) {
+          console.log("No workflows registered.");
+        } else {
+          console.log("\nWorkflows:");
+          for (const w of list) {
+            const trigger = w.trigger ? ` [${w.trigger.type}]` : " [manual]";
+            console.log(`  ${w.id} - ${w.name}${trigger} (${w.stepCount} steps)`);
+          }
+        }
+      } else if (sub === "run") {
+        const id = rest[1];
+        if (!id) {
+          console.error("Usage: kickd workflow run <id> [json-input]");
+          process.exit(1);
+        }
+        const input = rest[2] ? JSON.parse(rest[2]) : {};
+        console.log(`Running workflow: ${id}...`);
+        const result = await request(`/workflows/${id}/run`, {
+          method: "POST",
+          body: JSON.stringify(input),
+        });
+        console.log(result.success ? "Completed successfully" : "Failed");
+        console.log(`Duration: ${Math.round(result.totalDuration)}ms`);
+        console.log(`Steps: ${result.steps.length}`);
+        for (const step of result.steps) {
+          const status = step.success ? "OK" : "FAIL";
+          console.log(`  [${status}] ${step.stepId} (${Math.round(step.duration)}ms)`);
+          if (step.error) console.log(`    Error: ${step.error}`);
+        }
+      } else if (sub === "delete") {
+        const id = rest[1];
+        if (!id) {
+          console.error("Usage: kickd workflow delete <id>");
+          process.exit(1);
+        }
+        await request(`/workflows/${id}`, { method: "DELETE" });
+        console.log(`Deleted workflow: ${id}`);
+      }
+      break;
+    }
+
+    // ── Variables ──
+
+    case "vars":
+    case "variables": {
+      const sub = rest[0];
+      if (!sub || sub === "list") {
+        const scope = rest[1];
+        const path = scope ? `/variables?scope=${scope}` : "/variables";
+        const vars = await request(path);
+        if (vars.length === 0) {
+          console.log("No variables set.");
+        } else {
+          console.log("\nVariables:");
+          for (const v of vars) {
+            console.log(`  ${v.key} = ${v.value} [${v.scope}]`);
+          }
+        }
+      } else if (sub === "set") {
+        const key = rest[1];
+        const value = rest[2];
+        if (!key || value === undefined) {
+          console.error("Usage: kickd vars set <key> <value> [--scope <scope>]");
+          process.exit(1);
+        }
+        const scopeIdx = rest.indexOf("--scope");
+        const scope = scopeIdx !== -1 ? rest[scopeIdx + 1] : "global";
+        await request(`/variables/${key}`, {
+          method: "PUT",
+          body: JSON.stringify({ value, scope }),
+        });
+        console.log(`Set ${key} = ${value}`);
+      } else if (sub === "get") {
+        const key = rest[1];
+        if (!key) {
+          console.error("Usage: kickd vars get <key>");
+          process.exit(1);
+        }
+        const result = await request(`/variables/${key}`);
+        if (result.error) {
+          console.error(result.error);
+        } else {
+          console.log(result.value);
+        }
+      } else if (sub === "delete") {
+        const key = rest[1];
+        if (!key) {
+          console.error("Usage: kickd vars delete <key>");
+          process.exit(1);
+        }
+        await request(`/variables/${key}`, { method: "DELETE" });
+        console.log(`Deleted variable: ${key}`);
+      }
+      break;
+    }
+
+    // ── Queue ──
+
+    case "queue": {
+      const stats = await request("/queue/stats");
+      console.log("\nTask queue:");
+      console.log(`  Active:      ${stats.active}`);
+      console.log(`  Pending:     ${stats.pending}`);
+      console.log(`  Concurrency: ${stats.concurrency}`);
+      console.log(`  Max size:    ${stats.maxSize}`);
+      break;
+    }
+
     // ── Plugins ──
 
     case "install": {
@@ -438,7 +553,13 @@ async function main() {
     case "health": {
       const data = await request("/health");
       console.log(`Status: ${data.status}, Uptime: ${Math.round(data.uptime)}s`);
-      console.log(`Tasks: ${data.tasks}, Skills: ${data.skills}`);
+      if (data.checks) {
+        for (const check of data.checks) {
+          const icon = check.status === "healthy" ? "OK" : check.status === "degraded" ? "WARN" : "FAIL";
+          const latency = check.latencyMs ? ` (${Math.round(check.latencyMs)}ms)` : "";
+          console.log(`  [${icon}] ${check.name}${latency} ${check.message ?? ""}`);
+        }
+      }
       break;
     }
 
@@ -477,6 +598,20 @@ Events:
   events rules                      List event rules
   events add <event> <action>:<id>  Add a rule
   events delete <rule-id>           Delete a rule
+
+Workflows:
+  workflow list                     List workflows
+  workflow run <id> [json]          Run a workflow
+  workflow delete <id>              Delete a workflow
+
+Variables:
+  vars list [scope]                 List variables
+  vars set <key> <value>            Set a variable
+  vars get <key>                    Get a variable
+  vars delete <key>                 Delete a variable
+
+Queue:
+  queue                             Show queue stats
 
 Notifications:
   notify list                       List notification channels

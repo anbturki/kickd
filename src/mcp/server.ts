@@ -4,6 +4,9 @@ import { z } from "zod";
 import { registry } from "../tasks/registry";
 import { skills } from "../skills/engine";
 import { askClaude } from "../bridge/claude";
+import { workflows } from "../workflows";
+import { setVariable, getVariable, listVariables } from "../variables";
+import { taskQueue } from "../queue";
 import * as db from "../db";
 import * as credStore from "../credentials/store";
 
@@ -221,6 +224,92 @@ export function createMcpServer() {
       db.createEventRule({ id, eventType, sourceId, actionType, targetId, actionInput });
       return {
         content: [{ type: "text", text: JSON.stringify({ id, eventType, actionType, targetId }, null, 2) }],
+      };
+    }
+  );
+
+  // ── Workflows ──
+
+  server.tool(
+    "list_workflows",
+    "List all registered workflows",
+    {},
+    async () => {
+      return {
+        content: [{ type: "text", text: JSON.stringify(workflows.list(), null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    "run_workflow",
+    "Run a workflow by its ID",
+    {
+      workflowId: z.string().describe("The workflow ID to run"),
+      input: z.record(z.unknown()).optional().describe("Initial input for the workflow"),
+    },
+    async ({ workflowId, input }) => {
+      const result = await workflows.run(workflowId, input);
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+      };
+    }
+  );
+
+  // ── Variables ──
+
+  server.tool(
+    "set_variable",
+    "Set a persistent variable that can be used in templates",
+    {
+      key: z.string().describe("Variable name"),
+      value: z.string().describe("Variable value"),
+      scope: z.string().optional().describe("Variable scope (default: global)"),
+    },
+    async ({ key, value, scope }) => {
+      setVariable(key, value, scope);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ set: true, key }, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    "get_variable",
+    "Get a persistent variable value",
+    {
+      key: z.string().describe("Variable name"),
+    },
+    async ({ key }) => {
+      const value = getVariable(key);
+      return {
+        content: [{ type: "text", text: JSON.stringify({ key, value }, null, 2) }],
+      };
+    }
+  );
+
+  server.tool(
+    "list_variables",
+    "List all stored variables",
+    {
+      scope: z.string().optional().describe("Filter by scope"),
+    },
+    async ({ scope }) => {
+      return {
+        content: [{ type: "text", text: JSON.stringify(listVariables(scope), null, 2) }],
+      };
+    }
+  );
+
+  // ── Queue ──
+
+  server.tool(
+    "queue_stats",
+    "Get task queue statistics (active, pending, concurrency)",
+    {},
+    async () => {
+      return {
+        content: [{ type: "text", text: JSON.stringify(taskQueue.stats(), null, 2) }],
       };
     }
   );

@@ -32,7 +32,9 @@
   "scripts": {
     "start": "bun run src/daemon.ts",
     "mcp": "bun run src/mcp-entry.ts",
-    "cli": "bun run src/cli/index.ts"
+    "cli": "bun run src/cli/index.ts",
+    "test": "bun test",
+    "typecheck": "bun x tsc --noEmit"
   },
   "bin": {
     "kickd": "src/cli/index.ts"
@@ -42,7 +44,10 @@
     "./skills": "./src/skills/engine.ts",
     "./tasks": "./src/tasks/registry.ts",
     "./bridge": "./src/bridge/claude.ts",
-    "./types": "./src/types.ts"
+    "./types": "./src/types.ts",
+    "./workflows": "./src/workflows.ts",
+    "./queue": "./src/queue.ts",
+    "./variables": "./src/variables.ts"
   },
   "files": [
     "src",

@@ -1,6 +1,9 @@
 import { getActiveChannels } from "./db";
 import { eventBus, type KickdEvent } from "./events";
 import { createHmac } from "crypto";
+import { logger } from "./logger";
+
+const log = logger.child("notifications");
 
 interface NotificationPayload {
   event: string;
@@ -110,10 +113,10 @@ export async function notify(event: string, sourceType: string, sourceId: string
           await sendWebhook(channel.url, payload);
           break;
         default:
-          console.warn(`Unknown notification channel type: ${channel.type}`);
+          log.warn(`Unknown notification channel type: ${channel.type}`);
       }
     } catch (err) {
-      console.error(`Notification to ${channel.type}/${channel.id} failed:`, err);
+      log.error(`Notification to ${channel.type}/${channel.id} failed`, { error: err instanceof Error ? (err as Error).message : String(err) });
     }
   }
 }
@@ -131,7 +134,7 @@ export function initNotifications() {
   for (const { env, type } of envChannels) {
     const url = process.env[env];
     if (url) {
-      console.log(`  Notification channel from env: ${type}`);
+      log.info(`Notification channel from env: ${type}`);
     }
   }
 
@@ -179,7 +182,7 @@ export function initNotifications() {
           case "webhook": await sendWebhook(url, payload); break;
         }
       } catch (err) {
-        console.error(`Env notification (${type}) failed:`, err);
+        log.error(`Env notification (${type}) failed`, { error: err instanceof Error ? (err as Error).message : String(err) });
       }
     }
   });

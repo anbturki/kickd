@@ -1,5 +1,8 @@
 import { savePlugin, removePlugin, getPlugins } from "./db";
 import { skills } from "./skills/engine";
+import { logger } from "./logger";
+
+const log = logger.child("plugins");
 
 export async function installPlugin(packageName: string): Promise<{ success: boolean; skills: string[]; error?: string }> {
   // Install via bun
@@ -95,9 +98,9 @@ export async function loadInstalledPlugins() {
       if (typeof mod.register === "function") {
         mod.register(skills);
       }
-      console.log(`  Loaded plugin: ${plugin.name}`);
+      log.info(`Loaded plugin: ${plugin.name}`);
     } catch (err) {
-      console.error(`  Failed to load plugin ${plugin.name}:`, err);
+      log.error(`Failed to load plugin ${plugin.name}`, { error: err instanceof Error ? (err as Error).message : String(err) });
     }
   }
 }

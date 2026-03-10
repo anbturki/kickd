@@ -1,4 +1,7 @@
 import { logEvent, getActiveEventRules } from "./db";
+import { logger } from "./logger";
+
+const log = logger.child("events");
 
 export interface KickdEvent {
   type: string;
@@ -34,7 +37,7 @@ class EventBus {
 
   async emit(event: KickdEvent) {
     if (this.currentDepth >= this.maxDepth) {
-      console.warn(`Event depth limit (${this.maxDepth}) reached, dropping: ${event.type} from ${event.sourceId}`);
+      log.warn(`Event depth limit (${this.maxDepth}) reached, dropping: ${event.type} from ${event.sourceId}`);
       return;
     }
 
@@ -49,7 +52,7 @@ class EventBus {
         try {
           await handler(event);
         } catch (err) {
-          console.error(`Global event handler error for ${event.type}:`, err);
+          log.error(`Global event handler error for ${event.type}`, { error: err instanceof Error ? (err as Error).message : String(err) });
         }
       }
 
@@ -60,7 +63,7 @@ class EventBus {
           try {
             await handler(event);
           } catch (err) {
-            console.error(`Event handler error for ${event.type}:`, err);
+            log.error(`Event handler error for ${event.type}`, { error: err instanceof Error ? (err as Error).message : String(err) });
           }
         }
       }
@@ -97,10 +100,10 @@ export function initEventRules(
             await runSkill(rule.target_id, input);
             break;
           default:
-            console.warn(`Unknown event rule action: ${rule.action_type}`);
+            log.warn(`Unknown event rule action: ${rule.action_type}`);
         }
       } catch (err) {
-        console.error(`Event rule ${rule.id} failed:`, err);
+        log.error(`Event rule ${rule.id} failed`, { error: err instanceof Error ? (err as Error).message : String(err) });
       }
     }
   });

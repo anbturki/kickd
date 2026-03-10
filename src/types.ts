@@ -22,7 +22,6 @@ export interface TaskResult {
 
 export interface AutomationConfig {
   port: number;
-  mcpPort: number;
   tasksDir: string;
   logsDir: string;
   dbPath: string;

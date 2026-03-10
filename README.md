@@ -94,6 +94,7 @@ kickd queue                             # Show queue stats
 
 # Plugins
 kickd install <package>                 # Install a plugin from npm
+kickd uninstall <package>               # Uninstall a plugin
 kickd plugins                           # List installed plugins
 
 # Other
@@ -110,6 +111,7 @@ kickd ask "prompt"                      # Ask Claude Code
 | `GET` | `/stats` | Global statistics |
 | `GET` | `/metrics` | Prometheus-compatible metrics |
 | `GET` | `/tasks` | List tasks |
+| `GET` | `/tasks/:id` | Get a task |
 | `POST` | `/tasks/:id/run` | Run a task |
 | `GET` | `/tasks/:id/history` | Task run history |
 | `GET` | `/tasks/:id/stats` | Task statistics |
@@ -118,6 +120,7 @@ kickd ask "prompt"                      # Ask Claude Code
 | `GET` | `/skills/:id/history` | Skill run history |
 | `POST` | `/skills/chain` | Chain skills |
 | `GET` | `/workflows` | List workflows |
+| `GET` | `/workflows/:id` | Get a workflow |
 | `POST` | `/workflows` | Register a workflow |
 | `POST` | `/workflows/:id/run` | Run a workflow |
 | `DELETE` | `/workflows/:id` | Delete a workflow |
@@ -129,13 +132,18 @@ kickd ask "prompt"                      # Ask Claude Code
 | `POST` | `/queue/clear` | Clear pending queue |
 | `GET` | `/credentials` | List credentials (redacted) |
 | `POST` | `/credentials` | Store a credential |
+| `GET` | `/credentials/:id` | Get credential (redacted) |
+| `PUT` | `/credentials/:id` | Update credential |
+| `DELETE` | `/credentials/:id` | Delete credential |
 | `GET` | `/credentials/types` | List credential types |
 | `POST` | `/credentials/:id/test` | Test credential |
+| `GET` | `/credentials/:id/audit` | Credential audit log |
 | `POST` | `/credentials/oauth2/start` | Start OAuth2 flow |
 | `GET` | `/credentials/oauth2/callback` | OAuth2 callback |
 | `GET` | `/hooks` | List webhooks |
 | `POST` | `/hooks` | Create webhook |
 | `POST` | `/hooks/:id` | Trigger webhook |
+| `DELETE` | `/hooks/:id` | Delete webhook |
 | `GET` | `/events` | Event log |
 | `GET` | `/events/rules` | List event rules |
 | `POST` | `/events/rules` | Create event rule |

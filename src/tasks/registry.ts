@@ -3,7 +3,9 @@ import { withRetry } from "../retry";
 import { parseCron, nextOccurrence, isCronExpression } from "../cron";
 import { startTaskRun, finishTaskRun, getTaskHistory, getTaskStats } from "../db";
 import { eventBus } from "../events";
-import { notify } from "../notifications";
+import { logger } from "../logger";
+
+const log = logger.child("registry");
 
 type TaskHandler = (params?: Record<string, unknown>) => Promise<TaskResult>;
 
@@ -47,7 +49,7 @@ class TaskRegistry {
       return;
     }
 
-    console.warn(`  Unknown schedule format for ${task.id}: ${schedule}`);
+    log.warn(`Unknown schedule format for ${task.id}: ${schedule}`);
   }
 
   private scheduleCron(task: Task) {
@@ -116,7 +118,7 @@ class TaskRegistry {
           task.retry,
           (retryAttempt, error, delayMs) => {
             attempt = retryAttempt;
-            console.log(`  Task ${taskId} retry #${retryAttempt}: ${error.message} (waiting ${Math.round(delayMs)}ms)`);
+            log.info(`Task ${taskId} retry #${retryAttempt}: ${error.message} (waiting ${Math.round(delayMs)}ms)`);
 
             // Log retry attempt
             finishTaskRun(runId, "failed", error.message, performance.now() - start);

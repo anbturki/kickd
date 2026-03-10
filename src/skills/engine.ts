@@ -1,6 +1,9 @@
 import type { z } from "zod";
 import { startSkillRun, finishSkillRun, getSkillHistory } from "../db";
 import { eventBus } from "../events";
+import { logger } from "../logger";
+
+const log = logger.child("skills");
 
 interface SkillDefinition<TInput extends z.ZodType, TOutput extends z.ZodType> {
   id: string;
@@ -45,7 +48,7 @@ class SkillEngine {
     };
 
     this.skills.set(definition.id, registered);
-    console.log(`  Registered skill: ${definition.name}`);
+    log.info(`Registered skill: ${definition.name}`);
   }
 
   async run(skillId: string, input: unknown, chainId?: string): Promise<{ success: boolean; output: unknown; error?: string }> {
@@ -156,10 +159,25 @@ function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
 }
 
 function getZodTypeName(schema: z.ZodType): string {
-  const typeName = (schema as Record<string, unknown>)._zpiType ?? (schema as Record<string, unknown>)._type;
-  if (typeof typeName === "string") return typeName;
+  // Zod v4: check _zod.def.type
+  const zod = (schema as Record<string, unknown>)._zod as Record<string, unknown> | undefined;
+  if (zod?.def && typeof zod.def === "object") {
+    const def = zod.def as Record<string, unknown>;
+    if (typeof def.type === "string") return def.type;
+  }
+
+  // Zod v3 fallback: _def.typeName
+  const _def = (schema as Record<string, unknown>)._def as Record<string, unknown> | undefined;
+  if (_def?.typeName && typeof _def.typeName === "string") {
+    return _def.typeName.replace("Zod", "").toLowerCase();
+  }
+
+  // Direct property checks
   if ("innerType" in schema) return "optional";
-  return "unknown";
+  if ("shape" in schema) return "object";
+  if ("element" in schema) return "array";
+
+  return "string";
 }
 
 export { SkillEngine };

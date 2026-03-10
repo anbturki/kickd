@@ -1,5 +1,8 @@
 import { readdir } from "fs/promises";
 import { join } from "path";
+import { logger } from "../logger";
+
+const log = logger.child("loader");
 
 const SKILLS_DIR = join(import.meta.dir, "..", "..", "skills");
 
@@ -13,11 +16,11 @@ export async function loadSkills() {
       try {
         await import(modulePath); // skills self-register on import
       } catch (err) {
-        console.error(`  Failed to load skill ${file}:`, err);
+        log.error(`Failed to load skill ${file}`, { error: err instanceof Error ? err.message : String(err) });
       }
     }
   } catch {
-    console.log("  No skills directory found, creating it...");
+    log.info("No skills directory found, creating it...");
     await Bun.write(join(SKILLS_DIR, ".gitkeep"), "");
   }
 }

@@ -3,6 +3,9 @@ import type { Task, TaskResult } from "../types";
 import { readdir } from "fs/promises";
 import { join } from "path";
 import { config } from "../config";
+import { logger } from "../logger";
+
+const log = logger.child("loader");
 
 export async function loadTasks() {
   const tasksDir = config.tasksDir;
@@ -17,14 +20,14 @@ export async function loadTasks() {
         const mod = await import(modulePath);
         if (mod.task && mod.handler) {
           registry.register(mod.task as Task, mod.handler as () => Promise<TaskResult>);
-          console.log(`  Loaded task: ${mod.task.name}`);
+          log.info(`Loaded task: ${mod.task.name}`);
         }
       } catch (err) {
-        console.error(`  Failed to load task ${file}:`, err);
+        log.error(`Failed to load task ${file}`, { error: err instanceof Error ? err.message : String(err) });
       }
     }
   } catch {
-    console.log("  No tasks directory found, creating it...");
+    log.info("No tasks directory found, creating it...");
     await Bun.write(join(tasksDir, ".gitkeep"), "");
   }
 }

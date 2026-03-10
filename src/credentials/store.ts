@@ -1,6 +1,7 @@
 import { db } from "../db";
 import { encryptFields, decryptFields, hasEncryptionKey, type EncryptedBlob } from "./crypto";
 import { builtinCredentialTypes } from "./builtin-types";
+import { logger } from "../logger";
 import type {
   CredentialTypeDefinition,
   StoredCredential,
@@ -8,6 +9,8 @@ import type {
   CredentialSummary,
   CredentialField,
 } from "./types";
+
+const log = logger.child("credentials");
 
 // Ensure credential table exists
 db.exec(`
@@ -139,7 +142,7 @@ export function createCredential(params: {
   } else {
     // No encryption key — store as-is (warn in logs)
     if (sensitiveFields.length > 0 && !hasEncryptionKey()) {
-      console.warn(`  Warning: Storing credential "${params.name}" without encryption. Set KICKD_ENCRYPTION_KEY.`);
+      log.warn(`Storing credential "${params.name}" without encryption. Set KICKD_ENCRYPTION_KEY.`);
     }
     insertCredential.run(
       id, params.name, params.typeId,
